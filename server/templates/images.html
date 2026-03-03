@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Образы - RedTeam</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <header class="top-bar">
+    <h1>RedTeam Panel</h1>
+    <nav class="nav-links">
+      <a href="/" class="nav-btn">Устройства</a>
+      <a href="/dashboard" class="nav-btn">Dashboard</a>
+      <a href="/docs" class="nav-btn">Docs</a>
+      <a href="{{ zabbix_url }}" target="_blank" class="nav-btn zabbix-btn">Zabbix</a>
+    </nav>
+  </header>
+
+  <div class="images-page">
+    <h2>Raspberry Pi образы</h2>
+
+    <div class="image-section">
+      <h3>Содержимое образа</h3>
+      <div class="image-contents">
+        <div class="content-category">
+          <h4>Языки/Среды</h4>
+          <ul>
+            <li>Python 3.13 + pip + pipx</li>
+            <li>Go 1.25</li>
+            <li>Rust + Cargo</li>
+            <li>uv (Python)</li>
+          </ul>
+        </div>
+        <div class="content-category">
+          <h4>Сеть</h4>
+          <ul>
+            <li>nmap, masscan, naabu</li>
+            <li>bettercap, tcpdump</li>
+            <li>mitmproxy, mitm6</li>
+            <li>macchanger</li>
+          </ul>
+        </div>
+        <div class="content-category">
+          <h4>Pentest</h4>
+          <ul>
+            <li>Metasploit Framework</li>
+            <li>hydra, sqlmap</li>
+            <li>responder, nxc</li>
+            <li>certipy, ligolo</li>
+          </ul>
+        </div>
+        <div class="content-category">
+          <h4>Web Recon</h4>
+          <ul>
+            <li>nuclei + templates</li>
+            <li>httpx, katana, ffuf</li>
+            <li>dirsearch, nikto</li>
+            <li>dalfox (XSS)</li>
+          </ul>
+        </div>
+        <div class="content-category">
+          <h4>Словари</h4>
+          <ul>
+            <li>SecLists (~6000 файлов)</li>
+          </ul>
+        </div>
+        <div class="content-category">
+          <h4>Сервисы</h4>
+          <ul>
+            <li>Tailscale (авто-подключение)</li>
+            <li>ttyd (веб-терминал)</li>
+            <li>Zabbix Agent 2</li>
+            <li>Hub App (Flask)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="image-meta">
+        Debian 13 (trixie) · 16GB · kali:YOUR_PASSWORD
+      </div>
+    </div>
+
+    <div class="image-section generate-section">
+      <h3>Создать образ</h3>
+      
+      {% if not base_exists %}
+      <div class="warning-box">
+        Базовый образ не найден. Сначала соберите его с помощью скриптов 00 и 01.
+      </div>
+      {% endif %}
+      
+      <p class="section-desc">
+        Нажмите кнопку для создания персонализированного образа.<br>
+        Образ получит уникальный hostname и будет готов к записи на SD карту.
+      </p>
+      
+      <button id="generateBtn" class="generate-btn" {% if not base_exists %}disabled{% endif %}>
+        Создать образ
+      </button>
+      
+      <div id="statusBox" class="status-box"></div>
+    </div>
+
+    <div class="image-section">
+      <h3>Ручная сборка</h3>
+      <div class="manual-build">
+        <div class="build-step">
+          <span class="step-num">1</span>
+          <div class="step-content">
+            <strong>Артефакты</strong> (~15 мин)<br>
+            <code>bash 00-build-arm64-artifacts-trixie.sh</code>
+          </div>
+        </div>
+        <div class="build-step">
+          <span class="step-num">2</span>
+          <div class="step-content">
+            <strong>Базовый образ</strong> (1-2 часа)<br>
+            <code>sudo ARTIFACTS_DIR=./artifacts-arm64 bash 01-build-base-pi-image-trixie.sh</code>
+          </div>
+        </div>
+        <div class="build-step">
+          <span class="step-num">3</span>
+          <div class="step-content">
+            <strong>Запись на SD</strong><br>
+            Linux: <code>sudo dd if=image.pony.img of=/dev/sdX bs=4M status=progress</code><br>
+            Windows: Rufus / balenaEtcher / Raspberry Pi Imager
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const generateBtn = document.getElementById('generateBtn');
+  const statusBox = document.getElementById('statusBox');
+  let pollInterval = null;
+
+  generateBtn.addEventListener('click', async () => {
+    generateBtn.disabled = true;
+    statusBox.className = 'status-box busy';
+    statusBox.innerHTML = '<span class="spinner"></span> Генерация образа... Это займёт 2-3 минуты.';
+    
+    try {
+      const resp = await fetch('/images/generate', { method: 'POST' });
+      const data = await resp.json();
+      
+      if (!data.success) {
+        statusBox.className = 'status-box error';
+        statusBox.textContent = 'Ошибка: ' + data.error;
+        generateBtn.disabled = false;
+        return;
+      }
+      
+      pollInterval = setInterval(checkStatus, 3000);
+      
+    } catch (err) {
+      statusBox.className = 'status-box error';
+      statusBox.textContent = 'Ошибка: ' + err.message;
+      generateBtn.disabled = false;
+    }
+  });
+
+  async function checkStatus() {
+    try {
+      const resp = await fetch('/images/status');
+      const data = await resp.json();
+      
+      if (data.error) {
+        clearInterval(pollInterval);
+        statusBox.className = 'status-box error';
+        statusBox.textContent = 'Ошибка: ' + data.error;
+        generateBtn.disabled = false;
+        return;
+      }
+      
+      if (data.ready_file) {
+        clearInterval(pollInterval);
+        statusBox.className = 'status-box ready';
+        const isCompressed = data.ready_file.endsWith('.gz');
+        const note = isCompressed 
+          ? 'Файл сжат (gzip). После скачивания распакуйте: <code>gunzip ' + data.ready_file + '</code>'
+          : 'Файл будет удалён после скачивания или через 5 часов.';
+        statusBox.innerHTML = `
+          Образ готов: <strong>${data.ready_file}</strong><br>
+          <button class="download-btn" onclick="downloadImage('${data.ready_file}')">
+            Скачать образ
+          </button>
+          <p class="download-note">
+            ${note}
+          </p>
+        `;
+        generateBtn.disabled = false;
+        return;
+      }
+      
+      if (!data.busy) {
+        clearInterval(pollInterval);
+        generateBtn.disabled = false;
+      }
+      
+    } catch (err) {
+      console.error('Status check error:', err);
+    }
+  }
+
+  function downloadImage(filename) {
+    window.location.href = '/images/download/' + filename;
+    setTimeout(() => {
+      statusBox.className = 'status-box';
+      statusBox.style.display = 'none';
+    }, 2000);
+  }
+
+  checkStatus();
+  </script>
+</body>
+</html>

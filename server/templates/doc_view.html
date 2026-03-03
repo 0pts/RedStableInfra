@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }} - RedTeam Docs</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <header class="top-bar">
+    <h1>RedTeam Panel</h1>
+    <nav class="nav-links">
+      <a href="/" class="nav-btn">Устройства</a>
+      <a href="/images" class="nav-btn">Образы</a>
+      <a href="/dashboard" class="nav-btn">Dashboard</a>
+      <a href="/docs" class="nav-btn">Docs</a>
+      <a href="{{ zabbix_url }}" target="_blank" class="nav-btn zabbix-btn">Zabbix</a>
+    </nav>
+  </header>
+
+  <a href="/docs" class="back-link">← Назад к списку</a>
+
+  <div class="doc-content">
+    {{ content | safe }}
+  </div>
+</body>
+</html>

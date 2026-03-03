@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Документация - RedTeam</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <header class="top-bar">
+    <h1>RedTeam Panel</h1>
+    <nav class="nav-links">
+      <a href="/" class="nav-btn">Устройства</a>
+      <a href="/images" class="nav-btn images-btn">Образы</a>
+      <a href="/dashboard" class="nav-btn">Dashboard</a>
+      <a href="{{ zabbix_url }}" target="_blank" class="nav-btn zabbix-btn">Zabbix</a>
+    </nav>
+  </header>
+
+  <div class="docs-page">
+    <h2>Документация</h2>
+
+    <div class="docs-list">
+      {% if docs %}
+        {% for doc in docs %}
+        <a href="/docs/{{ doc.name }}" class="doc-card">
+          <span class="doc-name">{{ doc.name }}</span>
+        </a>
+        {% endfor %}
+      {% else %}
+        <p class="empty-message">Документы не найдены. Положите .md файлы в папку docs/</p>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

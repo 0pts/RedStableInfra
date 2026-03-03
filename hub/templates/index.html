@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Статус подключения</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+
+  <h1>Статус устройств</h1>
+
+  <div id="scanInfo" style="text-align:center; margin-bottom:10px;">
+    Последний скан: <span id="scanAge">—</span>
+  </div>
+
+  <div id="connectionStatus" class="disconnected">
+    <img id="connectionLogo"
+         src="{{ url_for('static', filename='images/logo.png') }}"
+         alt="Logo">
+    <div id="connectionStatusText">
+      Текущее подключение: <span id="currentConnection">…</span>
+    </div>
+  </div>
+
+  {% if current_type == 'keylogger' or current_type == 'keyboard' %}
+  <div id="logButtonsDiv" style="margin-left:20px;">
+    <form action="/download_log" method="POST" style="display:inline;">
+      <button type="submit" class="connect-btn">Скачать лог-файл</button>
+    </form>
+    <form action="/clear_log" method="POST" style="display:inline;">
+      <button type="submit" class="disconnect-btn">Очистить лог-файл</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <h2>Активные устройства</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Имя устройства</th>
+        <th>Тип</th>
+        <th>MAC-адрес</th>
+        <th>Статус</th>
+        <th>Действие</th>
+        <th>Активен (с)</th>
+      </tr>
+    </thead>
+    <tbody id="activeTableBody">
+    <tr id="activeLoading"><td colspan="6" style="text-align:center;">Сканирование…</td></tr>
+    {% for dev in active_devices %}
+    <tr data-mac="{{ dev.MAC }}">
+      <td class="td-name">{{  dev.name }}</td>
+      <td class="td-type">{{ dev.type }}</td>
+      <td class="td-mac">{{  dev.MAC  }}</td>
+      <td><div class="circle active"></div></td>
+      <td class="td-action">
+        <form action="/connect/{{ dev.MAC }}" method="POST" class="connect-form" style="display:inline;">
+          <button type="submit" class="connect-btn">Подключиться</button>
+        </form>
+        <form action="/disconnect/{{ dev.MAC }}" method="POST" class="disconnect-form" style="display:inline; margin-left:5px;">
+          <button type="submit" class="disconnect-btn">Отключиться</button>
+        </form>
+      </td>
+      <td class="td-age">0s</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  
+  <h2>Неактивные устройства</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Имя устройства</th>
+        <th>Тип</th>
+        <th>MAC-адрес</th>
+        <th>Статус</th>
+        <th>Активен (с)</th>
+      </tr>
+    </thead>
+    <tbody id="inactiveTableBody">
+    {% for dev in inactive_devices %}
+    <tr data-mac="{{ dev.MAC }}">
+      <td class="td-name">{{  dev.name }}</td>
+      <td class="td-type">{{ dev.type }}</td>
+      <td class="td-mac">{{  dev.MAC  }}</td>
+      <td><div class="circle inactive"></div></td>
+      <td class="td-age">—</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

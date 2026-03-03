@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RedTeam Control Panel</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <header class="top-bar">
+    <h1>RedTeam Panel</h1>
+    <nav class="nav-links">
+      <a href="/images" class="nav-btn images-btn">Образы</a>
+      <a href="/dashboard" class="nav-btn">Dashboard</a>
+      <a href="/docs" class="nav-btn">Docs</a>
+      <a href="{{ zabbix_url }}" target="_blank" class="nav-btn zabbix-btn">Zabbix</a>
+    </nav>
+  </header>
+
+  <div class="two-columns">
+    <div class="column">
+      <h2>Атакующие устройства</h2>
+      <div id="hubsContainer">
+        {% for dev in hubs %}
+        <div class="device-card hub-card">
+          <h3>{{ dev.hostname }}</h3>
+          <div class="device-info">{{ dev.ip }} · {{ dev.os }} · <span class="circle {{ 'active' if dev.status == 'active' else 'inactive' }}"></span></div>
+          <div class="device-actions">
+            <a href="/ui/{{ dev.ip }}" target="_blank"><button class="connect-btn">Web</button></a>
+            <a href="/terminal/{{ dev.ip }}" target="_blank"><button class="terminal-btn">Term</button></a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="column">
+      <h2>Участники команды</h2>
+      <div id="othersContainer">
+        {% for dev in others %}
+        <div class="device-card other-card">
+          <h3>{{ dev.hostname }}</h3>
+          <div class="device-info">{{ dev.ip }} · {{ dev.os }} · <span class="circle {{ 'active' if dev.status == 'active' else 'inactive' }}"></span></div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

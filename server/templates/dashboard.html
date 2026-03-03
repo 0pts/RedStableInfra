@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - RedTeam Server</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            gap: 16px;
+            padding: 16px;
+            height: calc(100vh - 50px);
+        }
+        .hosts-panel {
+            background: #1e1e1e;
+            border-radius: 8px;
+            padding: 12px;
+            overflow-y: auto;
+        }
+        .host-card {
+            background: #2d2d2d;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 4px solid #666;
+        }
+        .host-card:hover { background: #3d3d3d; }
+        .host-card.selected { background: #3d3d3d; border-left-color: #4CAF50; }
+        .host-card.available { border-left-color: #4CAF50; }
+        .host-card.unavailable { border-left-color: #f44336; }
+        .host-name { font-weight: bold; color: #fff; font-size: 14px; }
+        .host-ip { font-size: 11px; color: #888; margin-top: 2px; }
+        .host-status {
+            font-size: 10px; padding: 2px 6px; border-radius: 3px;
+            display: inline-block; margin-top: 4px;
+        }
+        .host-status.available { background: #1b5e20; color: #81c784; }
+        .host-status.unavailable { background: #b71c1c; color: #ef9a9a; }
+        .metrics-panel {
+            background: #1e1e1e;
+            border-radius: 8px;
+            padding: 16px;
+            overflow-y: auto;
+        }
+        .host-title { color: #fff; font-size: 20px; margin-bottom: 12px; }
+        /* Top stats row */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .stat-card {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+            border-top: 3px solid #666;
+        }
+        .stat-card.cpu { border-top-color: #ff9800; }
+        .stat-card.mem { border-top-color: #2196F3; }
+        .stat-card.disk { border-top-color: #9c27b0; }
+        .stat-card.uptime { border-top-color: #4CAF50; }
+        .stat-label { color: #888; font-size: 11px; text-transform: uppercase; margin-bottom: 4px; }
+        .stat-value { color: #fff; font-size: 28px; font-weight: bold; }
+        .stat-sub { color: #666; font-size: 11px; margin-top: 2px; }
+
+        /* Chart rows */
+        .charts-row {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .charts-row.two { grid-template-columns: 1fr 1fr; }
+        .charts-row.three { grid-template-columns: 1fr 1fr 1fr; }
+        .chart-card {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .chart-title { color: #888; font-size: 11px; text-transform: uppercase; margin-bottom: 8px; }
+        .chart-box { height: 180px; }
+        .chart-box.large { height: 220px; }
+
+        .no-host-selected {
+            display: flex; align-items: center; justify-content: center;
+            height: 100%; color: #666; font-size: 16px;
+        }
+        .loading { color: #888; text-align: center; padding: 20px; }
+        .error-msg { color: #f44336; background: #2d1515; padding: 10px; border-radius: 6px; }
+        .refresh-info { font-size: 10px; color: #555; margin-top: 8px; }
+    </style>
+</head>
+<body>
+    <header class="top-bar">
+        <h1>RedTeam Panel</h1>
+        <nav class="nav-links">
+            <a href="/" class="nav-btn">Устройства</a>
+            <a href="/images" class="nav-btn images-btn">Образы</a>
+            <a href="/dashboard" class="nav-btn active">Dashboard</a>
+            <a href="/docs" class="nav-btn">Docs</a>
+            <a href="{{ zabbix_url }}" target="_blank" class="nav-btn zabbix-btn">Zabbix</a>
+        </nav>
+    </header>
+
+    <div class="dashboard-container">
+        <div class="hosts-panel">
+            <h3 style="color:#fff;margin:0 0 10px;font-size:14px;">Устройства</h3>
+            <div id="hosts-list"><div class="loading">Загрузка...</div></div>
+            <div class="refresh-info">Обновление каждые 30 сек</div>
+        </div>
+        <div class="metrics-panel">
+            <div id="metrics-content">
+                <div class="no-host-selected">Выберите устройство</div>
+            </div>
+        </div>
+    </div>
+    <script>
+        let selectedHostId = null;
+        let charts = {};
+
+        const KEYS = {
+            cpu:      'system.cpu.util',
+            memPct:   'vm.memory.utilization',
+            memAvail: 'vm.memory.size[pavailable]',
+            uptime:   'system.uptime',
+            diskPct:  'vfs.fs.dependent.size[/,pused]',
+            diskRead: 'vfs.dev.read.rate[mmcblk0]',
+            diskWrite:'vfs.dev.write.rate[mmcblk0]',
+            loadAvg:  'system.cpu.load[all,avg1]'
+        };
+
+        function findNetworkInterfaces(items) {
+            const ifaces = {};
+            for (const item of items) {
+                const mIn = item.key_.match(/^net\.if\.in\["(.+?)"\]$/);
+                const mOut = item.key_.match(/^net\.if\.out\["(.+?)"\]$/);
+                if (mIn) {
+                    const name = mIn[1];
+                    if (!ifaces[name]) ifaces[name] = {};
+                    ifaces[name].inItem = item;
+                }
+                if (mOut) {
+                    const name = mOut[1];
+                    if (!ifaces[name]) ifaces[name] = {};
+                    ifaces[name].outItem = item;
+                }
+            }
+            return ifaces;
+        }
+
+        function findItem(items, key) {
+            return items.find(i => i.key_ === key) || null;
+        }
+
+        async function loadHosts() {
+            try {
+                const resp = await fetch('/api/zabbix/hosts');
+                const data = await resp.json();
+                if (!data.success) {
+                    document.getElementById('hosts-list').innerHTML = `<div class="error-msg">${data.error}</div>`;
+                    return;
+                }
+                const c = document.getElementById('hosts-list');
+                if (!data.hosts.length) { c.innerHTML = '<div class="loading">Нет устройств</div>'; return; }
+                c.innerHTML = data.hosts
+                    .filter(h => h.host !== 'Zabbix server')
+                    .map(h => `
+                    <div class="host-card ${h.available} ${selectedHostId===h.hostid?'selected':''}"
+                         onclick="selectHost('${h.hostid}','${h.name.replace(/'/g,"\\'")}')">
+                        <div class="host-name">${h.name}</div>
+                        <div class="host-ip">${h.ip}</div>
+                        <span class="host-status ${h.available}">${h.available==='available'?'Online':'Offline'}</span>
+                    </div>`).join('');
+            } catch(e) {
+                document.getElementById('hosts-list').innerHTML = `<div class="error-msg">${e.message}</div>`;
+            }
+        }
+
+        async function selectHost(hostid, hostname) {
+            selectedHostId = hostid;
+            loadHosts();
+            const mc = document.getElementById('metrics-content');
+            mc.innerHTML = '<div class="loading">Загрузка метрик...</div>';
+            // Destroy old charts
+            Object.values(charts).forEach(c => c.destroy());
+            charts = {};
+
+            try {
+                const resp = await fetch(`/api/zabbix/host/${hostid}/items`);
+                const data = await resp.json();
+                if (!data.success) { mc.innerHTML = `<div class="error-msg">${data.error}</div>`; return; }
+                const items = data.items;
+
+                const cpu = findItem(items, KEYS.cpu);
+                const mem = findItem(items, KEYS.memPct) || findItem(items, KEYS.memAvail);
+                const disk = findItem(items, KEYS.diskPct);
+                const up = findItem(items, KEYS.uptime);
+                const loadAvg = findItem(items, KEYS.loadAvg);
+                const diskRead = findItem(items, KEYS.diskRead);
+                const diskWrite = findItem(items, KEYS.diskWrite);
+                const netIfaces = findNetworkInterfaces(items);
+
+                // Format values
+                const cpuVal = cpu ? parseFloat(cpu.lastvalue).toFixed(1) + '%' : 'N/A';
+                let memVal = 'N/A';
+                if (mem) {
+                    const v = parseFloat(mem.lastvalue);
+                    memVal = mem.key_.includes('pavailable') ? (100-v).toFixed(1)+'%' : v.toFixed(1)+'%';
+                }
+                const diskVal = disk ? parseFloat(disk.lastvalue).toFixed(1) + '%' : 'N/A';
+                let upVal = 'N/A';
+                if (up) {
+                    const s = parseInt(up.lastvalue);
+                    upVal = `${Math.floor(s/86400)}d ${Math.floor((s%86400)/3600)}h ${Math.floor((s%3600)/60)}m`;
+                }
+
+                let html = `<div class="host-title">${hostname}</div>`;
+
+                // Stats row
+                html += `<div class="stats-row">
+                    <div class="stat-card cpu"><div class="stat-label">CPU</div><div class="stat-value">${cpuVal}</div></div>
+                    <div class="stat-card mem"><div class="stat-label">Memory</div><div class="stat-value">${memVal}</div></div>
+                    <div class="stat-card disk"><div class="stat-label">Disk /</div><div class="stat-value">${diskVal}</div></div>
+                    <div class="stat-card uptime"><div class="stat-label">Uptime</div><div class="stat-value" style="font-size:22px">${upVal}</div></div>
+                </div>`;
+
+                // Middle row: CPU + Memory charts
+                html += `<div class="charts-row two">
+                    <div class="chart-card"><div class="chart-title">CPU Utilization</div><div class="chart-box large"><canvas id="ch-cpu"></canvas></div></div>
+                    <div class="chart-card"><div class="chart-title">Memory Utilization</div><div class="chart-box large"><canvas id="ch-mem"></canvas></div></div>
+                </div>`;
+
+                // Disk usage + Disk I/O + Load
+                html += `<div class="charts-row three">
+                    <div class="chart-card"><div class="chart-title">Disk Space Used % (/)</div><div class="chart-box"><canvas id="ch-disk"></canvas></div></div>
+                    <div class="chart-card"><div class="chart-title">Disk I/O (mmcblk0)</div><div class="chart-box"><canvas id="ch-dio"></canvas></div></div>
+                    <div class="chart-card"><div class="chart-title">Load Average (1m)</div><div class="chart-box"><canvas id="ch-load"></canvas></div></div>
+                </div>`;
+
+                // Network interfaces row (dynamic)
+                const ifaceNames = Object.keys(netIfaces);
+                if (ifaceNames.length > 0) {
+                    const cols = ifaceNames.length >= 3 ? 'three' : (ifaceNames.length === 2 ? 'two' : 'two');
+                    html += `<div class="charts-row ${cols}">`;
+                    ifaceNames.forEach(name => {
+                        const canvasId = `ch-net-${name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                        html += `<div class="chart-card"><div class="chart-title">Network ${name}</div><div class="chart-box"><canvas id="${canvasId}"></canvas></div></div>`;
+                    });
+                    html += `</div>`;
+                }
+
+                mc.innerHTML = html;
+
+                // Load charts
+                if (cpu) loadSingleChart('ch-cpu', cpu.itemid, '#ff9800');
+                if (mem) loadSingleChart('ch-mem', mem.itemid, '#2196F3', mem.key_.includes('pavailable'));
+                if (disk) loadSingleChart('ch-disk', disk.itemid, '#9c27b0');
+                // Load network charts for all interfaces
+                const netColors = ['#4CAF50', '#2196F3', '#ff9800', '#e91e63', '#00bcd4', '#9c27b0'];
+                ifaceNames.forEach((name, idx) => {
+                    const canvasId = `ch-net-${name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                    const iface = netIfaces[name];
+                    const color1 = netColors[idx % netColors.length];
+                    const color2 = '#f44336';
+                    if (iface.inItem && iface.outItem) {
+                        loadDualChart(canvasId, iface.inItem.itemid, iface.outItem.itemid, color1, color2, 'In', 'Out');
+                    } else if (iface.inItem) {
+                        loadSingleChart(canvasId, iface.inItem.itemid, color1);
+                    }
+                });
+                if (diskRead && diskWrite) loadDualChart('ch-dio', diskRead.itemid, diskWrite.itemid, '#9c27b0', '#ff9800', 'Read', 'Write');
+                else if (diskRead) loadSingleChart('ch-dio', diskRead.itemid, '#9c27b0');
+                if (loadAvg) loadSingleChart('ch-load', loadAvg.itemid, '#00bcd4');
+
+            } catch(e) { mc.innerHTML = `<div class="error-msg">${e.message}</div>`; }
+        }
+
+        async function loadSingleChart(canvasId, itemid, color, invert=false) {
+            const resp = await fetch(`/api/zabbix/history/${itemid}`);
+            const data = await resp.json();
+            if (!data.success || !data.data.length) return;
+            const ctx = document.getElementById(canvasId);
+            if (!ctx) return;
+            let points = data.data;
+            if (invert) points = points.map(p => ({x: p.x, y: 100 - p.y}));
+            charts[canvasId] = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: [{ data: points, borderColor: color, backgroundColor: color+'1A', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2 }] },
+                options: chartOpts()
+            });
+        }
+
+        async function loadDualChart(canvasId, id1, id2, color1, color2, label1, label2) {
+            const [r1, r2] = await Promise.all([
+                fetch(`/api/zabbix/history/${id1}`).then(r=>r.json()),
+                fetch(`/api/zabbix/history/${id2}`).then(r=>r.json())
+            ]);
+            const ctx = document.getElementById(canvasId);
+            if (!ctx) return;
+            charts[canvasId] = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: [
+                    { label: label1, data: r1.data||[], borderColor: color1, backgroundColor: color1+'1A', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2 },
+                    { label: label2, data: r2.data||[], borderColor: color2, backgroundColor: color2+'1A', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2 }
+                ]},
+                options: chartOpts(true)
+            });
+        }
+
+        function chartOpts(showLegend=false) {
+            return {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: showLegend, labels: { color: '#888', boxWidth: 12, font: {size:10} } } },
+                scales: {
+                    x: { type:'time', grid:{color:'#333'}, ticks:{color:'#666',maxTicksLimit:6,font:{size:9}} },
+                    y: { grid:{color:'#333'}, ticks:{color:'#666',font:{size:9}}, beginAtZero:true }
+                }
+            };
+        }
+
+        loadHosts();
+        setInterval(loadHosts, 30000);
+    </script>
+</body>
+</html>

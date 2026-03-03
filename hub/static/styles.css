@@ -1,0 +1,80 @@
+:root {
+  --background-color: #111;
+  --text-color: #eee;
+  --highlight-color: #44ff44;
+  --table-bg: #222;
+  --border-color: #333;
+  --header-bg: rgb(42, 184, 42);
+  --accent-color-connect: #1aa31a;
+  --accent-color-disconnect: #cc3333;
+  --mobile-breakpoint: 600px;
+  --logo-size: 80px;
+  --corner-radius: 8px;
+  --font-family: 'Arial', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background-color: var(--background-color);
+  color: var(--text-color);
+  font-family: var(--font-family);
+  padding: 20px;
+}
+
+#connectionStatus {
+  display: flex; align-items: center; justify-content: center;
+  background-color: var(--table-bg); border-radius: var(--corner-radius);
+  padding: 15px; margin-bottom: 20px; text-align: center;
+  width: 90%; max-width: 1000px; margin: 0 auto;
+}
+
+#connectionLogo {
+  width: var(--logo-size); height: var(--logo-size);
+  border-radius: 50%; overflow: hidden; margin-right: 15px; flex-shrink: 0;
+}
+
+#connectionStatusText { font-size: 1.2em; }
+#currentConnection { color: var(--highlight-color); font-weight: bold; }
+
+h1 { text-align: center; margin-bottom: 20px; color: var(--highlight-color); }
+h2 { text-align: center; margin-top: 30px; margin-bottom: 10px; color: var(--text-color); font-weight: normal; }
+
+table {
+  width: 90%; max-width: 1000px; margin: 0 auto 20px;
+  border-collapse: separate; border-spacing: 0;
+  background-color: var(--table-bg); border: 1px solid var(--border-color);
+  border-radius: var(--corner-radius); overflow: hidden;
+}
+
+th, td { padding: 12px 15px; border-bottom: 1px solid var(--border-color); text-align: center; }
+thead tr:first-child th:first-child { border-top-left-radius: var(--corner-radius); }
+thead tr:first-child th:last-child { border-top-right-radius: var(--corner-radius); }
+th { background-color: var(--header-bg); }
+tbody tr:nth-child(even) { background-color: #1a1a1a; }
+tbody tr:hover { background-color: #333; }
+td:first-child { color: var(--highlight-color); font-weight: bold; }
+
+.circle { width: 18px; height: 18px; border-radius: 50%; display: inline-block; transition: background-color 0.3s, box-shadow 0.3s; }
+.active { background-color: var(--accent-color-connect); box-shadow: 0 0 8px var(--accent-color-connect); }
+.inactive { background-color: var(--accent-color-disconnect); box-shadow: 0 0 8px var(--accent-color-disconnect); }
+
+button.connect-btn { background-color: var(--accent-color-connect); }
+button.disconnect-btn { background-color: var(--accent-color-disconnect); }
+button.connect-btn:hover { background-color: #28b528; }
+button.disconnect-btn:hover { background-color: #ff5555; }
+
+button {
+  border: none; border-radius: 4px; padding: 8px 16px; cursor: pointer;
+  margin: 2px; font-size: 15px; transition: background-color 0.3s ease, transform 0.2s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+button:hover { transform: translateY(-2px); }
+button:active { transform: translateY(0); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); }
+
+@media (max-width: 600px) {
+  body { padding: 10px; }
+  table, th, td { font-size: 14px; }
+  button { font-size: 13px; padding: 6px 10px; }
+  #connectionStatusText { font-size: 1em; }
+}
